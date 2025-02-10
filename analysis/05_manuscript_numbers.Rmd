@@ -1,0 +1,200 @@
+---
+title: "Manuscript stats and numbers"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    self_contained: no
+  bookdown::word_document2:
+    toc: yes
+    number_sections: yes
+---
+
+This report prints stats and numbers for manuscript.
+
+```{r setup,  include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  cache.lazy = F,
+  bitmapType = "cairo"
+)
+Sys.setlocale("LC_ALL", "C")
+```
+
+```{r preamble}
+library(tidyverse)
+library(magrittr)
+library(cowplot)
+library(gtsummary)
+library(here)
+library(kableExtra)
+source(here("analysis/utils.R"))
+
+theme_gtsummary_compact()
+
+Sys.setlocale("LC_ALL","C")
+Sys.setenv("REDO_DATA" = "FALSE")
+
+```
+
+# Data
+These are based on the cases that
+
+```{r load-data}
+full_data <- readRDS(make_combined_filename())
+
+min_exp_date <- as.Date("2024-05-03")
+
+# Number of cases
+n_cases <- full_data %>% 
+  filter(!is.na(dt_recent_contact)) %>% 
+  distinct(register_id, test_result)
+
+cat("-- Number of cases with information on most recent contact:", nrow(n_cases), "\n")
+cat("-- Number of cases with information on most recent contact and test positive result:", n_cases %>% filter(test_result == "positive") %>%  nrow(), "\n")
+
+# Compute raw times from reported contact to symptom onset/rash
+raw_incubation_periods <- full_data %>% 
+  pivot_longer(cols = c("dt_symptom_onset",
+                        "dt_fever_onset",
+                        "dt_rash_onset"),
+               names_to = "to_what",
+               values_to = "to_date") %>% 
+  mutate(to_date = as.Date(to_date)) %>% 
+  pivot_longer(cols = c("dt_recent_contact"),
+               names_to = "from_what",
+               values_to = "from_date") %>% 
+  mutate(time_diff = difftime(to_date, from_date, units = "days") %>% 
+           as.numeric()) 
+
+cat("All contact information \n")
+raw_incubation_periods %>% 
+  filter(!is.na(time_diff)) %>%
+  select(time_diff, to_what) %>% 
+  tbl_summary(by = "to_what")
+
+cat("Contact information for PCR-positives \n")
+raw_incubation_periods %>% 
+  filter(!is.na(time_diff), test_result == "positive") %>%
+  select(time_diff, to_what) %>% 
+  tbl_summary(by = "to_what")
+
+```
+
+```{r}
+cat("Only single exposures information \n")
+raw_incubation_periods %>% 
+  filter(contact_occurence == "once") %>%
+  select(time_diff, to_what) %>% 
+  tbl_summary(by = "to_what")
+```
+```{r}
+raw_incubation_periods %>% 
+  filter(!is.na(time_diff), test_result == "positive") %>%
+  select(exposure_cat_simple, exposure_relation_simple, to_what) %>% 
+  tbl_summary(by = "to_what")
+
+```
+
+# Model results
+```{r}
+# Load results
+param_estimates_file <- here("generated_data/all_param_estimates.rds")
+cdfs_file <- here("generated_data/all_cdfs.rds")
+quantile_traj_file <- here("generated_data/all_quantile_traj.rds")
+target_quantiles_file <- here("generated_data/all_target_quantiles.rds")
+loo_file <- here("generated_data/all_loo.rds")
+loo_compare_file <- here("generated_data/all_loo_compared.rds")
+prop_exceed_file <- here("generated_data/all_prop_exceed.rds")
+prop_exceed_draws_file <- here("generated_data/all_prop_exceed_draws.rds")
+
+param_estimates <- readRDS(param_estimates_file) %>%
+  add_factors_to_results()
+
+prop_exceed <- readRDS(prop_exceed_file) %>% 
+  add_factors_to_results() 
+
+inc_period_q <- readRDS(target_quantiles_file) %>% 
+  add_factors_to_results() 
+
+quantile_stack_summary <- readRDS(here("generated_data/quantile_stack_summary.rds"))
+p_exceed_stack_summary <- readRDS(here("generated_data/p_exceed_stack_summary.rds"))
+
+```
+## Model comparison
+```{r}
+cat("-- Model comparison:")
+
+readRDS(here(loo_compare_file)) %>% 
+  kable(align = "c") %>%
+  kable_styling(full_width = F) %>%
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2, valign = "top")
+```
+
+## Mean and SD
+```{r params}
+
+cat("Overall mean/sd:")
+kable_res(df = param_estimates %>% 
+            filter(grouping == "overall"), 
+          var_col = "var")
+
+
+cat("Grouped mean/sd:")
+kable_res(df = param_estimates %>% 
+            filter(grouping != "overall"), 
+          var_col = "var")
+```
+
+## Quantiles
+```{r}
+
+cat("Overall quantiles:")
+kable_res(df = inc_period_q %>% 
+            filter(grouping == "overall"), 
+          var_col = "ps")
+
+
+cat("Grouped quantiles:")
+kable_res(df = inc_period_q %>% 
+            filter(grouping != "overall"), 
+          var_col = "ps")
+```
+
+## Quantiles (stacked)
+```{r}
+
+kable_res(df = quantile_stack_summary %>% 
+            mutate(distribution_label = "stacked",
+                   model_version = "stacked"), 
+          var_col = "ps")
+```
+
+## Proability of exceedence
+```{r}
+
+kable_res(df = prop_exceed, 
+          var_col = "thresh",
+          lo_col = "q5",
+          hi_col = "q95",
+          pct = TRUE)
+```
+
+
+
+## Proability of exceedence (stacked)
+```{r}
+
+kable_res(df = p_exceed_stack_summary %>% 
+            mutate(distribution_label = "stacked",
+                   model_version = "stacked"), 
+          var_col = "thresh",
+          pct = TRUE)
+```

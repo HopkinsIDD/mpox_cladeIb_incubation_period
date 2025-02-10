@@ -1,0 +1,9 @@
+do_plots: no
+redo_data_processing: yes
+symptom_type: "rash"
+group_column: "none"
+test_subset: "positive"
+model_version: "v0"
+use_data: yes
+dist_type: "L"
+run_genquant: yes
