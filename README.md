@@ -6,3 +6,4 @@ Elizabeth C. Lee, PhD; Daniel Mukadi-Bamuleka, PhD; Justin Lessler, PhD; Andrew 
 Espoir Bwenge Malembaka, MD, PhD†
 
 This repo contains the code for the estimation period of the incubation period of MPXV clade Ib.
+10.7326/ANNALS-25-01016
